@@ -36,6 +36,7 @@
 #include "rtsp-client.h"
 
 #define DEFAULT_ADDRESS         "0.0.0.0"
+#define DEFAULT_BIND_ADDRESS    NULL
 /* #define DEFAULT_ADDRESS         "::0" */
 #define DEFAULT_SERVICE         "8554"
 #define DEFAULT_BACKLOG         5
@@ -50,6 +51,7 @@ enum
   PROP_0,
   PROP_ADDRESS,
   PROP_SERVICE,
+  PROP_BIND_ADDRESS,
   PROP_BACKLOG,
 
   PROP_SESSION_POOL,
@@ -112,6 +114,16 @@ gst_rtsp_server_class_init (GstRTSPServerClass * klass)
           "The service or port number the server uses to listen on",
           DEFAULT_SERVICE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   /**
+   * GstRTSPServer::bind-address
+   *
+   * The actual address where the server is listening on, in host:port format.
+   * NULL if the server has not been bound with gst_rtsp_server_attach.
+   */
+  g_object_class_install_property (gobject_class, PROP_BIND_ADDRESS,
+      g_param_spec_string ("bind-address", "Bind address",
+          "The address the server is listening on", DEFAULT_BIND_ADDRESS,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+  /**
    * GstRTSPServer::backlog
    *
    * The backlog argument defines the maximum length to which the queue of
@@ -167,6 +179,7 @@ gst_rtsp_server_init (GstRTSPServer * server)
   server->lock = g_mutex_new ();
   server->address = g_strdup (DEFAULT_ADDRESS);
   server->service = g_strdup (DEFAULT_SERVICE);
+  server->bind_address = NULL;
   server->backlog = DEFAULT_BACKLOG;
   server->session_pool = gst_rtsp_session_pool_new ();
   server->media_mapping = gst_rtsp_media_mapping_new ();
@@ -181,6 +194,7 @@ gst_rtsp_server_finalize (GObject * object)
 
   g_free (server->address);
   g_free (server->service);
+  g_free (server->bind_address);
 
   g_object_unref (server->session_pool);
   g_object_unref (server->media_mapping);
@@ -245,6 +259,19 @@ gst_rtsp_server_get_address (GstRTSPServer * server)
 
   GST_RTSP_SERVER_LOCK (server);
   result = g_strdup (server->address);
+  GST_RTSP_SERVER_UNLOCK (server);
+
+  return result;
+}
+
+gchar *
+gst_rtsp_server_get_bind_address (GstRTSPServer * server)
+{
+  gchar *result;
+  g_return_val_if_fail (GST_IS_RTSP_SERVER (server), NULL);
+
+  GST_RTSP_SERVER_LOCK (server);
+  result = g_strdup (server->bind_address);
   GST_RTSP_SERVER_UNLOCK (server);
 
   return result;
@@ -504,6 +531,9 @@ gst_rtsp_server_get_property (GObject * object, guint propid,
     case PROP_SERVICE:
       g_value_take_string (value, gst_rtsp_server_get_service (server));
       break;
+    case PROP_BIND_ADDRESS:
+      g_value_take_string (value, gst_rtsp_server_get_bind_address (server));
+      break;
     case PROP_BACKLOG:
       g_value_set_int (value, gst_rtsp_server_get_backlog (server));
       break;
@@ -614,6 +644,35 @@ gst_rtsp_server_get_io_channel (GstRTSPServer * server)
     close (sockfd);
     sockfd = -1;
   }
+
+  if (sockfd != -1) {
+    socklen_t address_len;
+    guint16 port;
+    char buf[INET6_ADDRSTRLEN];
+
+    if (rp->ai_family == AF_INET) {
+      struct sockaddr_in address;
+
+      address_len = sizeof (struct sockaddr_in);
+      getsockname (sockfd, (struct sockaddr *) &address, &address_len);
+      inet_ntop (AF_INET, &address.sin_addr, buf, INET6_ADDRSTRLEN);
+      port = address.sin_port;
+    } else {
+      struct sockaddr_in6 address;
+
+      address_len = sizeof (struct sockaddr_in6);
+      getsockname (sockfd, (struct sockaddr *) &address.sin6_addr,
+          &address_len);
+      inet_ntop (AF_INET6, &address, buf, INET6_ADDRSTRLEN);
+      port = address.sin6_port;
+    }
+
+    g_free (server->bind_address);
+    server->bind_address = g_strdup_printf ("%s:%d", buf, htons (port));
+
+    GST_INFO_OBJECT (server, "bind address %s", server->bind_address);
+  }
+
   freeaddrinfo (result);
 
   if (sockfd == -1)

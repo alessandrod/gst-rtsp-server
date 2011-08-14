@@ -61,6 +61,7 @@ struct _GstRTSPServer {
   gchar       *address;
   gchar       *service;
   gint         backlog;
+  gchar       *bind_address;
 
   /* sessions on this server */
   GstRTSPSessionPool  *session_pool;
@@ -103,6 +104,8 @@ gchar *               gst_rtsp_server_get_address          (GstRTSPServer *serve
 
 void                  gst_rtsp_server_set_service          (GstRTSPServer *server, const gchar *service);
 gchar *               gst_rtsp_server_get_service          (GstRTSPServer *server);
+
+gchar *               gst_rtsp_server_get_bind_address     (GstRTSPServer *server);
 
 void                  gst_rtsp_server_set_backlog          (GstRTSPServer *server, gint backlog);
 gint                  gst_rtsp_server_get_backlog          (GstRTSPServer *server);
