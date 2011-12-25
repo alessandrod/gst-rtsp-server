@@ -106,6 +106,7 @@ struct _GstRTSPSession {
   gint          expire_count;
 
   GList        *medias;
+  GstRTSPClient *client;
 };
 
 struct _GstRTSPSessionClass {

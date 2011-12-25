@@ -941,6 +941,7 @@ handle_setup_request (GstRTSPClient * client, GstRTSPClientState * state)
     if (!(session = gst_rtsp_session_pool_create (client->session_pool)))
       goto service_unavailable;
 
+    session->client = client;
     state->session = session;
 
     /* we need a new media configuration in this session */
