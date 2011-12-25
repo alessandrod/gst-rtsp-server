@@ -66,7 +66,7 @@ static void gst_rtsp_client_finalize (GObject * obj);
 
 static void client_session_finalized (GstRTSPClient * client,
     GstRTSPSession * session);
-static void unlink_session_streams (GstRTSPClient * client,
+void gst_rtsp_client_unlink_session_streams (GstRTSPClient * client,
     GstRTSPSession * session, GstRTSPSessionMedia * media);
 
 G_DEFINE_TYPE (GstRTSPClient, gst_rtsp_client, G_TYPE_OBJECT);
@@ -116,15 +116,17 @@ client_unlink_session (GstRTSPClient * client, GstRTSPSession * session)
 {
   GList *medias;
 
+  g_object_ref (session);
   /* unlink all media managed in this session */
   for (medias = session->medias; medias; medias = g_list_next (medias)) {
     GstRTSPSessionMedia *media = medias->data;
 
+    gst_rtsp_client_unlink_session_streams (client, session, media);
     gst_rtsp_session_media_set_state (media, GST_STATE_NULL);
-    unlink_session_streams (client, session, media);
     /* unmanage the media in the session. */
     gst_rtsp_session_release_media (session, media);
   }
+  gst_object_unref (session);
 }
 
 static void
@@ -464,9 +466,9 @@ unlink_stream (GstRTSPClient * client, GstRTSPSession * session,
   gst_rtsp_session_allow_expire (session);
 }
 
-static void
-unlink_session_streams (GstRTSPClient * client, GstRTSPSession * session,
-    GstRTSPSessionMedia * media)
+void
+gst_rtsp_client_unlink_session_streams (GstRTSPClient * client,
+    GstRTSPSession * session, GstRTSPSessionMedia * media)
 {
   guint n_streams, i;
 
@@ -478,7 +480,7 @@ unlink_session_streams (GstRTSPClient * client, GstRTSPSession * session,
     /* get the stream as configured in the session */
     sstream = gst_rtsp_session_media_get_stream (media, i);
     /* get the transport, if there is no transport configured, skip this stream */
-    if (!(tr = sstream->trans.transport))
+    if (!sstream || !(tr = sstream->trans.transport))
       continue;
 
     if (tr->lower_transport == GST_RTSP_LOWER_TRANS_TCP) {
@@ -530,7 +532,7 @@ handle_teardown_request (GstRTSPClient * client, GstRTSPClientState * state)
   state->sessmedia = media;
 
   /* unlink the all TCP callbacks */
-  unlink_session_streams (client, session, media);
+  gst_rtsp_client_unlink_session_streams (client, session, media);
 
   /* remove the session from the watched sessions */
   g_object_weak_unref (G_OBJECT (session),
@@ -659,7 +661,7 @@ handle_pause_request (GstRTSPClient * client, GstRTSPClientState * state)
     goto invalid_state;
 
   /* unlink the all TCP callbacks */
-  unlink_session_streams (client, session, media);
+  gst_rtsp_client_unlink_session_streams (client, session, media);
 
   /* then pause sending */
   gst_rtsp_session_media_set_state (media, GST_STATE_PAUSED);

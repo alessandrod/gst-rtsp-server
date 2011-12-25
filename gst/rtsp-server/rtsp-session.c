@@ -92,6 +92,10 @@ gst_rtsp_session_free_stream (GstRTSPSessionStream * stream)
   g_free (stream);
 }
 
+void
+gst_rtsp_client_unlink_session_streams (GstRTSPClient * client,
+    GstRTSPSession * session, GstRTSPSessionMedia * media);
+
 static void
 session_media_unprepared (GstRTSPMedia * media, gpointer user_data)
 {
@@ -99,7 +103,8 @@ session_media_unprepared (GstRTSPMedia * media, gpointer user_data)
   GstRTSPSessionMedia *session_media = NULL, *tmp = NULL;
   GList *walk;
 
-  g_signal_handlers_disconnect_by_func (media, session_media_unprepared, media);
+  g_signal_handlers_disconnect_by_func (media, session_media_unprepared,
+      session);
 
   for (walk = session->medias; walk; walk = walk->next) {
     tmp = (GstRTSPSessionMedia *) walk->data;
@@ -108,6 +113,8 @@ session_media_unprepared (GstRTSPMedia * media, gpointer user_data)
   }
   g_assert (session_media);
 
+  gst_rtsp_client_unlink_session_streams (session->client, session,
+      session_media);
   if (!gst_rtsp_session_release_media (session, session_media)) {
     /* remove the session */
     gst_rtsp_session_pool_remove (session->client->session_pool, session);
@@ -126,7 +133,7 @@ gst_rtsp_session_free_media (GstRTSPSessionMedia * media,
   GST_INFO ("free session media %p", media);
 
   g_signal_handlers_disconnect_by_func (media->media, session_media_unprepared,
-      media);
+      session);
   gst_rtsp_session_media_set_state (media, GST_STATE_NULL);
 
   for (i = 0; i < size; i++) {
@@ -278,7 +285,6 @@ gst_rtsp_session_release_media (GstRTSPSession * sess,
 
     if (find == media) {
       sess->medias = g_list_delete_link (sess->medias, walk);
-
       gst_rtsp_session_free_media (find, sess);
       break;
     }
