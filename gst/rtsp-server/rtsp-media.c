@@ -1753,8 +1753,10 @@ gst_rtsp_media_prepare (GstRTSPMedia * media)
 
     /* we add a fakesink here in order to make the state change async. We remove
      * the fakesink again in the no-more-pads callback. */
-    media->fakesink = gst_element_factory_make ("fakesink", "fakesink");
-    gst_bin_add (GST_BIN (media->pipeline), media->fakesink);
+    if (media->fakesink == NULL) {
+      media->fakesink = gst_element_factory_make ("fakesink", "fakesink");
+      gst_bin_add (GST_BIN (media->pipeline), media->fakesink);
+    }
   }
 
   GST_INFO ("setting pipeline to PAUSED for media %p", media);
